@@ -1,0 +1,117 @@
+<canvas id="snake" width="500" height="500"/>
+<script type="text/javascript">
+	var defs = {
+		gridSize: 10
+		
+	}
+	
+	window.onload=function(){
+		snakes = [];
+		snakes.push(new Snake(document.getElementById("snake"),0,0,500,500));
+		
+		window.addEventListener("keydown",keys);
+		interval = setInterval(game,1000/10);
+		//game();
+	}
+	
+	function game(){
+		for(var i = 0; i < snakes.length; i++){
+			snakes[i].update();
+			snakes[i].draw();
+		}
+	}
+	
+	function Snake(canvas,screenX,screenY,width,height){
+		var blockWidth = width/defs.gridSize;
+		var blockHeight = height/defs.gridSize;
+		var ctx = canvas.getContext("2d");
+		var screen = {
+			x: screenX,
+			y: screenY,
+			w: width,
+			h: height
+		};
+		var dir = {x: 0, y: 0};
+		var pos = {
+			x: defs.gridSize/2,
+			y: defs.gridSize/2
+		};
+		var food = {
+			x: Math.floor(Math.random() * defs.gridSize),
+			y: Math.floor(Math.random() * defs.gridSize)
+		};
+		var size = 1;
+		var body = [];
+		
+		return {
+			setDir: function(d){
+				dir = d;
+			},
+			
+			update: function(){
+				pos.x += dir.x;
+				pos.y += dir.y;
+				
+				if(pos.x < 0) pos.x = defs.gridSize -1;
+				if(pos.x >= defs.gridSize) pos.x = 0;
+				
+				if(pos.y < 0) pos.y = defs.gridSize -1;
+				if(pos.y >= defs.gridSize) pos.y = 0;
+				
+				for(var i = 0; i < body.length; i++){
+					if(body[i].x == pos.x && body[i].y == pos.y) {
+						size = 1;
+						pos.x = pos.y = defs.gridSize/2 - 1;
+					}
+				}
+				body.push({x:pos.x,y:pos.y});
+				
+				if(pos.x == food.x && pos.y == food.y) {
+					size++;
+					food.x = Math.floor(Math.random()*defs.gridSize);
+					food.y = Math.floor(Math.random()*defs.gridSize);
+				}
+				
+				while(body.length > size) body.shift();
+			},
+			
+			draw: function(){
+				ctx.fillStyle="black";
+				ctx.fillRect(screen.x,screen.y,screen.w,screen.h);
+				
+				ctx.fillStyle="blue";
+				for(var i = 0; i < body.length; i++){
+					ctx.fillRect(screen.x + body[i].x * blockWidth,screen.y + body[i].y * blockHeight,blockWidth,blockHeight);
+				}
+
+				ctx.fillStyle="green";
+				ctx.fillRect(food.x * blockWidth,food.y * blockHeight,blockWidth,blockHeight);
+			}
+
+		}
+	}
+	
+	function keys(evt){
+		var dirX = 0;
+		var dirY = 0;
+		switch(evt.keyCode) {
+			case 37: dirX = -1;dirY =  0; break;
+			case 38: dirX =  0;dirY = -1; break;
+			case 39: dirX =  1;dirY =  0; break;
+			case 40: dirX =  0;dirY =  1; break;
+			
+			case 65: 
+				speed += 10;
+				clearInterval(interval);
+				interval = setInterval(game,1000/speed);
+				break;
+			case 68:
+				speed -= 10;
+				clearInterval(interval);
+				interval = setInterval(game,1000/speed);
+			default: console.log(evt.keyCode);
+		}
+		snakes[0].setDir({x:dirX,y:dirY});
+		
+	}
+</script>
