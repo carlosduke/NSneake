@@ -625,6 +625,12 @@ function Neat(population, inputSize, outputSize) {
 		
 		getGeneration: function(){return pool.generation},
 		
+		getBetterGenome: function(){
+			var genomes = this.getGenomes();
+			genomes.sort(function(a,b){return b.fitness - a.fitness;});
+			return genomes[0];
+		},
+		
 		newGeneration: function(){
 			setMaxValues();
 			cullSpecies(false);

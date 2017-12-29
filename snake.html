@@ -20,35 +20,36 @@
 	</head>
 	<body>
 		<div class="testArea">
-			<canvas id="snake" width="500" height="500"></canvas>
+			<canvas id="canvasSnake" width="500" height="500"></canvas>
 		</div>
 		<div class="controlArea">
-			<p>Loops by second: <span id="loopsId"></span> press + or - to change</p>
 			<p><button id="autoRun">Start/Stop</button></p>
+			<p><button id="playBetter">Play Better</button></p>
+			<p><button id="load">Load</button></p>
+			<p>Loops by second: <span id="loopsId"></span> press + or - to change</p>
 			<pre id="summaryNeat"></pre>
 		</div>
 		
 		<script type="text/javascript">
+			var snakePlay = null;
+			
 			var defs = {
 				gridSize: 10,
-				gridTests: 6,
+				gridTests: 10,
 				loopsBySecond: 900
-			}
+			};
 			
 			var snakes = [];
 			var snakesTest = [];
 			var neat = new Neat(300, Math.pow(defs.gridSize,2) + 2, 4);
 			
-			if(localStorage.pool){
-				neat.load();
-			}
-			
-			var canvas = document.getElementById("snake");
+			var canvas = document.getElementById("canvasSnake");
 			var ctx = canvas.getContext("2d");
 			
 			var currentSnake = 0;
 			
 			var auto = false;
+			var playBetter = false;
 			var interval = null;
 
 			window.onload = function(){
@@ -74,7 +75,7 @@
 					
 					//*/
 					clearInterval(interval);
-					interval = setInterval(game,1000/900);
+					interval = setInterval(game,1000/defs.loopsBySecond);
 					auto = true;
 					/*/
 					var generation = neat.getGeneration();
@@ -85,61 +86,134 @@
 				}
 			}
 
+			document.getElementById('playBetter').onclick = function(){
+				if(!playBetter){
+					playBetter = true;
+				} else {
+					playbetter = false;
+				}
+			}
+			
+			document.getElementById('load').onclick = function(){
+				if(localStorage.pool){
+					neat.load();
+				}
+				reload();
+			}
+			
+			function reload(){
+				snakes = [];
+				snakesTest = [];
+				
+				var genomes = neat.getGenomes();
+				
+				if(interval){
+					clearInterval(interval);
+				}
+					
+				for(var kG in genomes){
+					snakes.push(new Snake(genomes[kG]));
+				}
+				
+				currentSnake = 0;
+			
+				auto = false;
+				playBetter = false;
+				interval = null;
+			}
+			
 			function game() {
-				for(var i = 0; i < snakesTest.length; ) {
-					if(snakesTest[i].isDead()) {
-						snakesTest[i].getGenome().fitness = snakesTest[i].getFitness();
-						snakesTest.splice(i,1);
-						continue;
-					}
-					i++;
-				}
-				//console.log(snakesTest);
-				
-				while(snakesTest.length < Math.pow(defs.gridTests,2) && currentSnake < snakes.length){
-					var snake = snakes[currentSnake++];
-					neat.generateNetwork(snake.getGenome());
-					snakesTest.push(snake);
-				}
-					
-				if(currentSnake == snakes.length){
-					neat.newGeneration();
-					neat.save();
-					currentSnake = 0;
-					snakesTest = [];
-				
-					var genomes = neat.getGenomes();
-					snakes = [];
-					for(var kG in genomes){
-						snakes.push(new Snake(genomes[kG]));
+				if(playBetter){
+					if(!snakePlay){
+						snakePlay = new Snake(neat.getBetterGenome());
 					}
 					
-					//clearInterval(interval);
-					//auto = false;
-				}
-				
-				update();
-				draw();
-				
-				var summary = neat.getSummary()
-								+ "\nCurrentSnake: " + currentSnake
-								+ "\nTests: " + snakesTest.length;
-				
-				for(var y = 0; y < defs.gridTests; y++){
-					for(var x = 0; x < defs.gridTests; x++){
-						var snake = snakesTest[y * defs.gridTests + x];
-						if(snake == null) continue;
+					var inputs = [];
+					for(var i = 0; i < Math.pow(defs.gridSize,2); i++){
+						inputs.push(0);
+					}
+					
+					var foodPos = snakePlay.getFood();
+					var headPos = snakePlay.getPos();
+					var body = snakePlay.getBody();
+					
+					inputs[headPos.y * defs.gridSize + headPos.x] = 1;
+					for(var bK in body){
+						inputs[body[bK].y * defs.gridSize + body[bK].x] = 1;
+					}
+					inputs[foodPos.y * defs.gridSize + foodPos.x] = 2;
+					
+					inputs.push(snakePlay.getDir().x);
+					inputs.push(snakePlay.getDir().y);
+					var output = neat.evaluateGenome(snakePlay.getGenome(),inputs);
+					
+					var dir = {
+						x:output[0]-output[1],
+						y:output[2]-output[3]
+					};
+					snakePlay.setDir(dir);
+					snakePlay.update();
+
+					ctx.clearRect(0,0,canvas.width,canvas.height);
+					ctx.fillStyle="black";
+					ctx.fillRect(0,0,canvas.width,canvas.height);
+					snakePlay.draw(0,0,500,500);
+				} else {
+					for(var i = 0; i < snakesTest.length; i++) {
+						if(snakesTest[i].isDead()) {
+							if(currentSnake < snakes.length){
+								var snake = snakes[currentSnake++];
+								neat.generateNetwork(snake.getGenome());
+								snakesTest[i].getGenome().fitness = snakesTest[i].getFitness();
+								snakesTest.splice(i,1,snake);
+							}
+						}
+					}
+					while(snakesTest.length < Math.pow(defs.gridTests,2) && currentSnake < snakes.length){
+						var snake = snakes[currentSnake++];
+						neat.generateNetwork(snake.getGenome());
+						snakesTest.push(snake);
+					}
 						
-						summary +=  "\n\tMoves: " + snake.getMoves()
-										+ ", Dir: " + JSON.stringify(snake.getDir())
-										+ ", Size: " + snake.getBody().length
-										+ ", Genome: "
-										+ "\n\t\tGenes: " + snake.getGenome().genes.length
-										+ ", Fitness: " + snake.getGenome().fitness
-						;
+					if(currentSnake == snakes.length){
+						neat.newGeneration();
+						neat.save();
+						currentSnake = 0;
+						snakesTest = [];
+					
+						var genomes = neat.getGenomes();
+						snakes = [];
+						for(var kG in genomes){
+							snakes.push(new Snake(genomes[kG]));
+						}
+						
+						//clearInterval(interval);
+						//auto = false;
 					}
+					
+					update();
+					draw();
+					
+					var summary = neat.getSummary()
+									+ "\nCurrentSnake: " + currentSnake
+									+ "\nTests: " + snakesTest.length;
+					
+					for(var y = 0; y < defs.gridTests; y++){
+						for(var x = 0; x < defs.gridTests; x++){
+							var snake = snakesTest[y * defs.gridTests + x];
+							if(snake == null) continue;
+							
+							summary +=  "\n\tMoves: " + snake.getMoves()
+											+ ", Dir: " + JSON.stringify(snake.getDir())
+											+ ", Size: " + snake.getBody().length
+											+ ", Genome: "
+											+ "\n\t\tGenes: " + snake.getGenome().genes.length
+											+ ", Fitness: " + snake.getGenome().fitness
+							;
+						}
+					}
+					document.getElementById("summaryNeat").innerHTML = summary;
 				}
-				document.getElementById("summaryNeat").innerHTML = summary;
 			}
 			
 			function update(){
@@ -237,7 +311,7 @@
 						}
 						
 						if(dir.x == 0 && dir.y == 0) return;
-						fitness++;
+						//fitness++;
 						
 						//console.log(dir);
 						pos.x += dir.x;
@@ -256,14 +330,14 @@
 								pos.x -= dir.x;
 								pos.y -= dir.y;
 								
-								fitness -= Math.pow(defs.gridSize,2)/2;
+								//fitness -= Math.pow(defs.gridSize,2)/2;
 								return;
 							}
 						}
 						body.push({x:pos.x,y:pos.y});
 						if(pos.x == food.x && pos.y == food.y) {
 							size++;
-							fitness += Math.pow(defs.gridSize,2);
+							fitness += Math.pow(defs.gridSize,2) + Math.pow(defs.gridSize,2) - moves;
 							moves = 0;
 							//console.log(pos,food);
 							food.x = Math.floor(Math.random()*defs.gridSize);
