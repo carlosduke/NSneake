@@ -1,117 +1,333 @@
-<canvas id="snake" width="500" height="500"/>
-<script type="text/javascript">
-	var defs = {
-		gridSize: 10
-		
-	}
-	
-	window.onload=function(){
-		snakes = [];
-		snakes.push(new Snake(document.getElementById("snake"),0,0,500,500));
-		
-		window.addEventListener("keydown",keys);
-		interval = setInterval(game,1000/10);
-		//game();
-	}
-	
-	function game(){
-		for(var i = 0; i < snakes.length; i++){
-			snakes[i].update();
-			snakes[i].draw();
-		}
-	}
-	
-	function Snake(canvas,screenX,screenY,width,height){
-		var blockWidth = width/defs.gridSize;
-		var blockHeight = height/defs.gridSize;
-		var ctx = canvas.getContext("2d");
-		var screen = {
-			x: screenX,
-			y: screenY,
-			w: width,
-			h: height
-		};
-		var dir = {x: 0, y: 0};
-		var pos = {
-			x: defs.gridSize/2,
-			y: defs.gridSize/2
-		};
-		var food = {
-			x: Math.floor(Math.random() * defs.gridSize),
-			y: Math.floor(Math.random() * defs.gridSize)
-		};
-		var size = 1;
-		var body = [];
-		
-		return {
-			setDir: function(d){
-				dir = d;
-			},
+<html>
+	<head>
+		<script type="text/javascript" src="neat.js"></script>
+		<style>
+			.testArea {
+				width: 50%;
+				height: 100%;
+				overflow: auto;
+				float: left;
+			}
 			
-			update: function(){
-				pos.x += dir.x;
-				pos.y += dir.y;
-				
-				if(pos.x < 0) pos.x = defs.gridSize -1;
-				if(pos.x >= defs.gridSize) pos.x = 0;
-				
-				if(pos.y < 0) pos.y = defs.gridSize -1;
-				if(pos.y >= defs.gridSize) pos.y = 0;
-				
-				for(var i = 0; i < body.length; i++){
-					if(body[i].x == pos.x && body[i].y == pos.y) {
-						size = 1;
-						pos.x = pos.y = defs.gridSize/2 - 1;
-					}
-				}
-				body.push({x:pos.x,y:pos.y});
-				
-				if(pos.x == food.x && pos.y == food.y) {
-					size++;
-					food.x = Math.floor(Math.random()*defs.gridSize);
-					food.y = Math.floor(Math.random()*defs.gridSize);
-				}
-				
-				while(body.length > size) body.shift();
-			},
+			.controlArea {
+				width: 50%;
+				height: 100%;
+				overflow: auto;
+				float: left;
+			}
+		</style>
+		
+	</head>
+	<body>
+		<div class="testArea">
+			<canvas id="snake" width="500" height="500"></canvas>
+		</div>
+		<div class="controlArea">
+			<p>Loops by second: <span id="loopsId"></span> press + or - to change</p>
+			<p><button id="autoRun">Start/Stop</button></p>
+			<pre id="summaryNeat"></pre>
+		</div>
+		
+		<script type="text/javascript">
+			var defs = {
+				gridSize: 10,
+				gridTests: 6,
+				loopsBySecond: 900
+			}
 			
-			draw: function(){
-				ctx.fillStyle="black";
-				ctx.fillRect(screen.x,screen.y,screen.w,screen.h);
-				
-				ctx.fillStyle="blue";
-				for(var i = 0; i < body.length; i++){
-					ctx.fillRect(screen.x + body[i].x * blockWidth,screen.y + body[i].y * blockHeight,blockWidth,blockHeight);
-				}
+			var snakes = [];
+			var snakesTest = [];
+			var neat = new Neat(300, Math.pow(defs.gridSize,2) + 2, 4);
+			
+			if(localStorage.pool){
+				neat.load();
+			}
+			
+			var canvas = document.getElementById("snake");
+			var ctx = canvas.getContext("2d");
+			
+			var currentSnake = 0;
+			
+			var auto = false;
+			var interval = null;
 
-				ctx.fillStyle="green";
-				ctx.fillRect(food.x * blockWidth,food.y * blockHeight,blockWidth,blockHeight);
+			window.onload = function(){
+				var genomes = neat.getGenomes();
+				
+				for(var kG in genomes){
+					snakes.push(new Snake(genomes[kG]));
+				}
+				
+				window.addEventListener("keydown",keys);
+				//interval = setInterval(game,1000/10);
+				document.getElementById('loopsId').innerHTML = defs.loopsBySecond;
+				game();
+				//neat.newGeneration();
+			}
+			
+			document.getElementById("autoRun").onclick = function(){
+				if(auto){
+					clearInterval(interval);
+					auto = false;
+				} else {
+					auto = true;
+					
+					//*/
+					clearInterval(interval);
+					interval = setInterval(game,1000/900);
+					auto = true;
+					/*/
+					var generation = neat.getGeneration();
+					while(generation == neat.getGeneration()){
+						game();
+					}
+					//*/
+				}
 			}
 
-		}
-	}
-	
-	function keys(evt){
-		var dirX = 0;
-		var dirY = 0;
-		switch(evt.keyCode) {
-			case 37: dirX = -1;dirY =  0; break;
-			case 38: dirX =  0;dirY = -1; break;
-			case 39: dirX =  1;dirY =  0; break;
-			case 40: dirX =  0;dirY =  1; break;
+			function game() {
+				for(var i = 0; i < snakesTest.length; ) {
+					if(snakesTest[i].isDead()) {
+						snakesTest[i].getGenome().fitness = snakesTest[i].getFitness();
+						snakesTest.splice(i,1);
+						continue;
+					}
+					i++;
+				}
+				//console.log(snakesTest);
+				
+				while(snakesTest.length < Math.pow(defs.gridTests,2) && currentSnake < snakes.length){
+					var snake = snakes[currentSnake++];
+					neat.generateNetwork(snake.getGenome());
+					snakesTest.push(snake);
+				}
+					
+				if(currentSnake == snakes.length){
+					neat.newGeneration();
+					neat.save();
+					currentSnake = 0;
+					snakesTest = [];
+				
+					var genomes = neat.getGenomes();
+					snakes = [];
+					for(var kG in genomes){
+						snakes.push(new Snake(genomes[kG]));
+					}
+					
+					//clearInterval(interval);
+					//auto = false;
+				}
+				
+				update();
+				draw();
+				
+				var summary = neat.getSummary()
+								+ "\nCurrentSnake: " + currentSnake
+								+ "\nTests: " + snakesTest.length;
+				
+				for(var y = 0; y < defs.gridTests; y++){
+					for(var x = 0; x < defs.gridTests; x++){
+						var snake = snakesTest[y * defs.gridTests + x];
+						if(snake == null) continue;
+						
+						summary +=  "\n\tMoves: " + snake.getMoves()
+										+ ", Dir: " + JSON.stringify(snake.getDir())
+										+ ", Size: " + snake.getBody().length
+										+ ", Genome: "
+										+ "\n\t\tGenes: " + snake.getGenome().genes.length
+										+ ", Fitness: " + snake.getGenome().fitness
+						;
+					}
+				}
+				document.getElementById("summaryNeat").innerHTML = summary;
+			}
 			
-			case 65: 
-				speed += 10;
-				clearInterval(interval);
-				interval = setInterval(game,1000/speed);
-				break;
-			case 68:
-				speed -= 10;
-				clearInterval(interval);
-				interval = setInterval(game,1000/speed);
-			default: console.log(evt.keyCode);
-		}
-		snakes[0].setDir({x:dirX,y:dirY});
-		
-	}
-</script>
+			function update(){
+				for(var sk in snakesTest){
+					var inputs = [];
+					var snake = snakesTest[sk];
+					
+					for(var i = 0; i < Math.pow(defs.gridSize,2); i++){
+						inputs.push(0);
+					}
+					
+					var foodPos = snake.getFood();
+					var headPos = snake.getPos();
+					var body = snake.getBody();
+					
+					inputs[headPos.y * defs.gridSize + headPos.x] = 1;
+					for(var bK in body){
+						inputs[body[bK].y * defs.gridSize + body[bK].x] = 1;
+					}
+					inputs[foodPos.y * defs.gridSize + foodPos.x] = 2;
+					
+					inputs.push(snake.getDir().x);
+					inputs.push(snake.getDir().y);
+					
+					var output = neat.evaluateGenome(snake.getGenome(),inputs);
+					
+					var dir = {
+						x:output[0]-output[1],
+						y:output[2]-output[3]
+					};
+					snake.setDir(dir);
+					snake.update();
+				}
+			}
+			
+			function draw(){
+				ctx.clearRect(0,0,canvas.width,canvas.height);
+				ctx.fillStyle="black";
+				ctx.fillRect(0,0,canvas.width,canvas.height);
+				
+				var blockWidth = canvas.width / defs.gridTests;
+				var blockHeight = canvas.height / defs.gridTests;
+				
+				for(var y = 0; y < defs.gridTests; y++){
+					for(var x = 0; x < defs.gridTests; x++){
+						var snake = snakesTest[y * defs.gridTests + x];
+						if(snake == null) continue;
+						
+						snake.draw(blockWidth * x,blockHeight * y,blockWidth,blockHeight);
+					}
+				}
+			}
+			
+			function Snake(genome){
+				var dir = {x: 0, y: 0};
+				var pos = {
+					x: defs.gridSize/2,
+					y: defs.gridSize/2
+				};
+				var food = {
+					x: Math.floor(Math.random() * defs.gridSize),
+					y: Math.floor(Math.random() * defs.gridSize)
+				};
+				var size = 1;
+				var body = [pos];
+				
+				var dead = false;
+				var moves = 0;
+				
+				var fitness = 0;
+				
+				return {
+					setDir: function(d){
+						dir = d;
+					},
+					setAlive: function(){dead = false;},
+					setGenome: function(g){genome = g;},
+					
+					isDead: function(){return dead;},
+					getDir: function(){return dir;},
+					getPos: function(){return pos},
+					getFood: function(){return food},
+					getBody: function(){return body},
+					getGenome: function(){return genome;},
+					getMoves: function(){return moves;},
+					getFitness: function(){return fitness;},
+					
+					update: function(){
+						if(dead) return;
+						
+						if(moves++ == Math.pow(defs.gridSize,2)){
+							dead = true;
+							moves = 0;
+							return;
+						}
+						
+						if(dir.x == 0 && dir.y == 0) return;
+						fitness++;
+						
+						//console.log(dir);
+						pos.x += dir.x;
+						pos.y += dir.y;
+						
+						if(pos.x < 0) pos.x = defs.gridSize -1;
+						if(pos.x >= defs.gridSize) pos.x = 0;
+						
+						if(pos.y < 0) pos.y = defs.gridSize -1;
+						if(pos.y >= defs.gridSize) pos.y = 0;
+						
+						for(var i = 0; i < body.length; i++){
+							if(size > 1 && body[i].x == pos.x && body[i].y == pos.y) {
+								dead = true;
+								moves = 0;
+								pos.x -= dir.x;
+								pos.y -= dir.y;
+								
+								fitness -= Math.pow(defs.gridSize,2)/2;
+								return;
+							}
+						}
+						body.push({x:pos.x,y:pos.y});
+						if(pos.x == food.x && pos.y == food.y) {
+							size++;
+							fitness += Math.pow(defs.gridSize,2);
+							moves = 0;
+							//console.log(pos,food);
+							food.x = Math.floor(Math.random()*defs.gridSize);
+							food.y = Math.floor(Math.random()*defs.gridSize);
+						}
+						
+						while(body.length > size) body.shift();
+					},
+					
+					draw: function(x,y,width,height){
+						ctx.beginPath();
+						ctx.strokeStyle="white";
+						ctx.rect(x,y,width,height);
+						ctx.stroke();
+						
+						var blockWidth = width/defs.gridSize;
+						var blockHeight = height/defs.gridSize;
+						
+						ctx.fillStyle="blue";
+						for(var i = 0; i < body.length; i++){
+							ctx.fillRect(x + body[i].x * blockWidth,y + body[i].y * blockHeight,blockWidth,blockHeight);
+						}
+
+						ctx.fillStyle="green";
+						ctx.fillRect(x + food.x * blockWidth,y + food.y * blockHeight,blockWidth,blockHeight);
+					}
+
+				}
+			}
+			
+			function keys(evt){
+				var dirX = 0;
+				var dirY = 0;
+				switch(evt.key) {
+					/*case 37: dirX = -1;dirY =  0; break;
+					case 38: dirX =  0;dirY = -1; break;
+					case 39: dirX =  1;dirY =  0; break;
+					case 40: dirX =  0;dirY =  1; break;*/
+					case '+':
+						if(defs.loopsBySecond + 10 <= 1000){
+							defs.loopsBySecond += 10;
+							if(auto) {
+								clearInterval(interval);
+								interval = setInterval(game,1000/defs.loopsBySecond);
+							}
+							document.getElementById('loopsId').innerHTML = defs.loopsBySecond;
+						}
+						break;
+					case '-':
+						if(defs.loopsBySecond - 10 > 10){
+							defs.loopsBySecond -= 10;
+							if(auto) {
+								clearInterval(interval);
+								interval = setInterval(game,1000/defs.loopsBySecond);
+							}
+							document.getElementById('loopsId').innerHTML = defs.loopsBySecond;
+						}
+						break;
+					
+					
+				}
+				//snakes[0].setDir({x:dirX,y:dirY});
+				
+			}
+		</script>
+	</body>
+</html>
